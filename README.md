@@ -1,106 +1,106 @@
-# Tìm kiếm và Xây dựng Tự động Kho Ngữ liệu Hán Nôm từ Internet
+# Automatic Han-Nom Corpus Builder
 
 > *Automatic Retrieval and Construction of a Han-Nom Calligraphy Corpus from the Internet*
 
-Hệ thống tự động **thu thập ảnh thư pháp chữ Hán từ mạng xã hội** và **gán nhãn OCR
-chuẩn xác** để xây dựng một kho ngữ liệu (corpus) phục vụ nghiên cứu và huấn luyện mô
-hình nhận dạng chữ Hán viết tay. Đây là đề tài khóa luận tốt nghiệp ngành Công nghệ tri
-thức — Trường ĐH Khoa học Tự nhiên, ĐHQG TP.HCM.
+An end-to-end system that **automatically crawls Han (Chinese) calligraphy images from
+social media** and **produces accurate OCR labels** to build a corpus for research and for
+training handwriting-recognition models. This is an undergraduate thesis project in
+Knowledge Engineering at the University of Science, VNU-HCM.
 
-> ⚠️ Dự án đang phát triển — kho ngữ liệu và pipeline còn được tiếp tục cải thiện.
+> ⚠️ Work in progress — the corpus and pipeline are still being improved.
 
 ---
 
-## Bài toán
+## Problem
 
-Văn bản Hán Nôm dạng thư pháp (câu đối, hoành phi, thơ) được chia sẻ rất nhiều trên
-mạng xã hội nhưng **phân tán và không có nhãn máy đọc được**, trong khi các hệ OCR phổ
-thông nhận dạng kém chữ viết tay thể Hành/Thảo (nét dính liền, nhiều dị thể). Dự án khai
-thác một đặc điểm: **người đăng thường gõ lại nội dung chữ trong ảnh ở phần chú thích** —
-đây là nguồn "dữ liệu song hành" ảnh ↔ văn bản có sẵn để sinh nhãn mà không cần chuyên
-gia gõ tay từng mẫu.
+Han-Nom calligraphy (couplets, horizontal boards, poems) is shared in large volumes on
+social media, but it is **scattered and has no machine-readable labels**, while general OCR
+systems perform poorly on running/cursive scripts (connected strokes, many variant forms).
+The project exploits one key observation: **posters usually retype the text of the image in
+their caption** — a ready source of parallel image ↔ text data that lets us generate labels
+without hiring experts to transcribe every sample by hand.
 
-## Kiến trúc hệ thống
+## System architecture
 
 ```
-    Facebook  ──►  (1) Bộ cào dữ liệu (Playwright + chặn bắt GraphQL)
-                        con trỏ trạng thái · khử trùng lặp SQLite · tự khôi phục
+    Facebook  ──►  (1) Crawler (Playwright + GraphQL interception)
+                        state cursor · SQLite dedup · auto-recovery
                               │
                               ▼
-                   (2) Bổ sung siêu dữ liệu truy vết nguồn gốc
+                   (2) Enrich source-tracing metadata
                               │
                               ▼
-    ảnh + chú thích  ──►  (3) PIPELINE CỔNG LỌC GÁN NHÃN
+    image + caption  ──►  (3) LABELING GATE PIPELINE
         │
-        ├─ Gemini 3.1 Flash-Lite đọc ảnh (Batch API, giảm 50% chi phí) — làm MỐC xác thực
-        ├─ Gióng hàng Levenshtein / partial-ratio (chuẩn hoá phồn·giản + chữ dị thể)
-        │     └─ điểm ≥ 75 → ĐẠT   |   < 75 → loại (chú thích không khớp ảnh)
-        ├─ Nhãn = cắt NGUYÊN VĂN từ chú thích (không dùng chữ do OCR sinh ra)
-        └─ Phân dòng theo cột vật lý bằng YOLO + hậu xử lý khử hộp trùng
+        ├─ Gemini 3.1 Flash-Lite reads the image (Batch API, 50% cheaper) — as an ANCHOR
+        ├─ Levenshtein / partial-ratio alignment (Traditional↔Simplified + variant normalize)
+        │     └─ score ≥ 75 → PASS   |   < 75 → reject (caption does not match image)
+        ├─ Label = VERBATIM substring of the caption (never text produced by the OCR)
+        └─ Line segmentation by physical column via YOLO + de-duplication post-processing
                               │
                               ▼
-                   Kho ngữ liệu có nhãn + truy vết nguồn
+                   Labeled corpus + source traceability
 ```
 
-**Nguyên tắc gán nhãn cốt lõi:** nhãn lấy **100% nguyên văn** từ chú thích của người
-đăng; kết quả OCR chỉ dùng làm mốc để xác thực và gióng hàng, không bao giờ là nguồn chữ
-của nhãn — nhờ đó tránh được hiện tượng mô hình "bịa" chữ.
+**Core labeling principle:** every label is taken **100% verbatim** from the poster's
+caption; the OCR output is only an anchor used to verify and align — never the source of the
+label's characters. This eliminates model hallucination from the labels.
 
-## Kết quả
+## Results
 
-| Chỉ số | Giá trị |
+| Metric | Value |
 |---|---|
-| Bài đăng thô thu thập | 55.404 |
-| Bài đưa qua pipeline gán nhãn | 13.071 |
-| **Mẫu đạt chuẩn (kho ngữ liệu)** | **10.184** (77,9%) |
-| Độ tương đồng Levenshtein trung bình | **98,21%** (trung vị 100%) |
-| Số ký tự Hán khác nhau | 5.592 |
+| Raw posts collected | 55,404 |
+| Posts sent through the labeling pipeline | 13,071 |
+| **Passing samples (final corpus)** | **10,184** (77.9%) |
+| Mean Levenshtein similarity | **98.21%** (median 100%) |
+| Distinct Han characters | 5,592 |
 
-## Công nghệ
+## Tech stack
 
-`Python` · `Playwright` (chặn bắt GraphQL) · `Google Gemini API` (Batch API) ·
-`YOLO / Ultralytics` (phát hiện cột chữ) · `RapidFuzz` (gióng hàng chuỗi) ·
-`OpenCC` (chuẩn hoá phồn·giản) · `SQLite` · `aiohttp`
+`Python` · `Playwright` (GraphQL interception) · `Google Gemini API` (Batch API) ·
+`YOLO / Ultralytics` (text-column detection) · `RapidFuzz` (string alignment) ·
+`OpenCC` (Traditional/Simplified normalization) · `SQLite` · `aiohttp`
 
-## Cấu trúc mã nguồn
+## Source layout
 
 ```
 src/
-├── facebook_scraper_v11.py        Bộ cào chính (cào sâu về quá khứ)
-├── facebook_scraper_catchup.py    Bộ cào bù bài mới (con trỏ riêng)
-├── scrape_forever.py / scrape_catchup_forever.py   Lớp tự khởi động lại
-├── rename_new.py                  Đánh số thư mục bài mới
-├── prep_new_posts.py              Chạy YOLO + dựng metadata cho bài mới
-├── batch_api_gate.py              Pipeline cổng lọc gán nhãn (Batch API)
-├── fix_columns.py                 Hậu xử lý khử hộp cột YOLO trùng/lồng
-├── apply_fixes.py                 Áp lại hậu xử lý (không gọi API)
-├── pipeline_v15.py                Nạp YOLO + phân bổ ký tự theo chiều cao cột
-├── enrich_metadata.py             Giải mã post_id → link nguồn, tác giả
-├── build_index.py                 Tạo bảng chỉ mục truy vết
-├── find_post.py                   Tra ngược một bài từ link/id
-└── runs/detect/.../best.pt        Trọng số YOLO đã huấn luyện
+├── facebook_scraper_v11.py        Main crawler (deep crawl into the past)
+├── facebook_scraper_catchup.py    Catch-up crawler for new posts (separate cursor)
+├── scrape_forever.py / scrape_catchup_forever.py   Auto-restart wrappers
+├── rename_new.py                  Number the new post folders
+├── prep_new_posts.py              Run YOLO + build metadata for new posts
+├── batch_api_gate.py              Labeling gate pipeline (Batch API)
+├── fix_columns.py                 Post-process: remove overlapping/nested YOLO boxes
+├── apply_fixes.py                 Re-apply post-processing (no API calls)
+├── pipeline_v15.py                Load YOLO + allocate characters by column height
+├── enrich_metadata.py             Decode post_id → source link, author
+├── build_index.py                 Build the traceability index
+├── find_post.py                   Reverse-lookup a post by link/id
+└── runs/detect/.../best.pt        Trained YOLO weights
 ```
 
-Xem **`src/HuongDanCaiDat.txt`** và **`src/HuongDanSuDung.txt`** để cài đặt và chạy.
+See **[INSTALL.md](INSTALL.md)** and **[USAGE.md](USAGE.md)** to set up and run.
 
-## Cài đặt nhanh
+## Quick install
 
 ```bash
 python -m venv venv && venv\Scripts\activate
 pip install google-genai rapidfuzz opencc-python-reimplemented pillow numpy playwright aiohttp ultralytics
 playwright install msedge
 ```
-Đặt API key Gemini vào biến `API_KEY` trong `batch_api_gate.py` / `pipeline_v15.py`
-(thay chuỗi `YOUR_GEMINI_API_KEY_HERE`).
+Put your Gemini API key in the `API_KEY` variable of `batch_api_gate.py` /
+`pipeline_v15.py` (replace `YOUR_GEMINI_API_KEY_HERE`).
 
-## Ghi chú
+## Notes
 
-- Repo này **không kèm** dữ liệu thô, kho ngữ liệu, cookies đăng nhập hay các tệp con trỏ
-  trạng thái (xem `.gitignore`) — vì lý do dung lượng và bảo mật.
-- Dữ liệu thu thập từ nhóm cộng đồng công khai, chỉ đọc nội dung công khai phục vụ mục
-  đích nghiên cứu học thuật.
+- This repo does **not** include raw data, the corpus, login cookies, or state-cursor files
+  (see `.gitignore`) — for size and security reasons.
+- Data is collected from a public community group, reading only public content for academic
+  research purposes.
 
-## Tác giả
+## Author
 
-Ngô Xuân Hiếu — Khoa Công nghệ Thông tin, Trường ĐH Khoa học Tự nhiên (ĐHQG-HCM).
-GVHD: PGS.TS. Đinh Điền, TS. Lương An Vinh.
+Ngo Xuan Hieu — Faculty of Information Technology, University of Science (VNU-HCM).
+Advisors: Assoc. Prof. Dinh Dien, Dr. Luong An Vinh.
