@@ -1,0 +1,38 @@
+# Bi mat / phien dang nhap — TUYET DOI khong commit
+cookies.json
+*.env
+.env
+
+# Du lieu tho / kho ngu lieu (nang, khong dua len GitHub)
+data_V11/
+data_V2/
+dataset_merged/
+dataset_new/
+dataset_gate/
+dataset_gemini3/
+data/
+*.jsonl
+
+# Trang thai cao — khong the tai tao, luu rieng
+checkpoint*.txt
+history*.db
+*.db
+batch_gate_state*.json
+dataset_gate_rejected*.json
+
+# Anh / nhan sinh ra khi chay
+*.jpg
+*.jpeg
+*.png
+
+# Python
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# He dieu hanh / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

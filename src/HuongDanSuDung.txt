@@ -1,0 +1,100 @@
+HƯỚNG DẪN SỬ DỤNG
+Đề tài: Tìm kiếm và xây dựng tự động kho ngữ liệu Hán Nôm từ Internet
+Mã đề tài: T826_KL_CNTTHUC03
+Sinh viên: Ngô Xuân Hiếu - 21127505
+
+Python là ngôn ngữ thông dịch, không cần biên dịch. Mọi lệnh chạy trong thư
+mục src với môi trường ảo đã kích hoạt (venv\Scripts\activate).
+
+Bộ mã nguồn này gồm các thành phần cốt lõi của hệ thống: bộ cào dữ liệu,
+pipeline gán nhãn (cổng lọc), thành phần liên quan mô hình YOLO và các tiện
+ích quản trị/truy vết dữ liệu.
+
+========================================================================
+A. TỔNG QUAN LUỒNG XỬ LÝ
+========================================================================
+ (1) Cào dữ liệu Facebook  ->  data_V11/<post>/ (ảnh + caption + info.json)
+ (2) Bổ sung siêu dữ liệu truy vết nguồn gốc
+ (3) Chuẩn hoá bài mới     ->  dataset_new/   (chạy YOLO, dựng post_info.json)
+ (4) Pipeline cổng lọc gán nhãn  ->  dataset_gate/
+
+========================================================================
+B. CHI TIẾT TỪNG BƯỚC
+========================================================================
+
+1. CÀO DỮ LIỆU (Playwright + chặn bắt GraphQL)
+   - Cào sâu về quá khứ (dùng con trỏ checkpoint_v11.txt, tự khôi phục):
+        python scrape_forever.py
+   - Cào bù bài mới (không đụng checkpoint cũ, tự dừng khi gặp 300 bài
+     trùng liên tiếp):
+        python scrape_catchup_forever.py
+   - Đánh số thứ tự các thư mục bài mới sau khi cào:
+        python rename_new.py
+   Hai file trên gọi lần lượt facebook_scraper_v11.py (cào sâu) và
+   facebook_scraper_catchup.py (cào bù). Mỗi bài là một thư mục
+   data_V11/<số>/ gồm images/, metadata.txt (caption gốc) và info.json.
+   Danh sách bài đã cào được khử trùng lặp bằng SQLite (history_v11.db).
+
+2. BỔ SUNG SIÊU DỮ LIỆU TRUY VẾT NGUỒN GỐC
+        python enrich_metadata.py     (giải mã post_id thành liên kết bài
+                                       gốc, tác giả, thời điểm cào)
+        python build_index.py         (tạo bảng chỉ mục post_index.csv)
+   Tra cứu ngược một bài bất kỳ từ liên kết Facebook:
+        python find_post.py <link-hoặc-id>
+
+3. CHUẨN HOÁ BÀI MỚI TRƯỚC KHI GÁN NHÃN
+        python -u prep_new_posts.py
+   Bài vừa cào về chỉ có info.json và metadata.txt, chưa có toạ độ cột chữ.
+   Bước này chạy mô hình YOLO trực tiếp trên ảnh để lấy toạ độ cột và vùng
+   lạc khoản, đồng thời dựng post_info.json theo đúng lược đồ mà pipeline
+   gán nhãn yêu cầu (trường original_metadata lấy từ metadata.txt, kèm khối
+   truy vết nguồn), ghi ra dataset_new/. Chỉnh hai biến LO, HI trong tệp để
+   chọn khoảng thư mục cần xử lý. Bước này bỏ qua các bài đã xử lý nên có
+   thể chạy lại nhiều lần mà không mất công.
+
+4. PIPELINE CỔNG LỌC GÁN NHÃN (Gemini 3.1 Flash-Lite, Batch API giảm 50% phí)
+   Tệp chính là batch_api_gate.py. Chạy trực tiếp sẽ dùng khoảng thư mục
+   mặc định khai báo trong tệp:
+        python -u batch_api_gate.py
+   Hoặc truyền tham số để xử lý một khoảng bất kỳ với tệp trạng thái riêng,
+   nhờ đó chạy được nhiều khoảng song song mà không giẫm lên nhau:
+        python -u batch_api_gate.py <SRC> <OFFSET> <LIMIT> <STATE> <REJECT>
+   Ví dụ, ba lệnh dưới đây tái lập đúng ba đợt chạy đã dùng trong báo cáo:
+        python -u batch_api_gate.py dataset_merged 0    2000 stateA.json rejA.json
+        python -u batch_api_gate.py dataset_merged 9000 2000 stateB.json rejB.json
+        python -u batch_api_gate.py dataset_new    0    3000 stateC.json rejC.json
+   Luồng xử lý bên trong:
+     - Gửi ảnh + caption lên Batch API, chờ Gemini đọc (OCR làm mốc).
+     - Chấm cổng bằng khoảng cách Levenshtein / partial ratio (ngưỡng 75),
+       có chuẩn hoá phồn/giản thể và bảng chữ dị thể.
+     - Bài ĐẠT: nhãn cắt nguyên văn từ caption; chia dòng theo các cột do
+       mô hình YOLO phát hiện (đã khử hộp trùng/lồng bằng fix_columns.py,
+       xem mục 5). Ghi ra dataset_gate/.
+     - Bài KHÔNG ĐẠT: ghi tệp rejected tương ứng để rà soát.
+   Tiến trình lưu ở tệp trạng thái; nếu gián đoạn, chạy lại đúng lệnh trên
+   là tự tiếp tục từ pha chờ, không gửi lại yêu cầu (không tốn thêm phí).
+
+   Áp lại các bước hậu xử lý trên dữ liệu đã có (không gọi API):
+        python -u apply_fixes.py      (khử hộp cột YOLO trùng/lồng/lạc khoản,
+                                       lọc ngoặc chú thích, cứu ký tự biên)
+
+5. THÀNH PHẦN LIÊN QUAN MÔ HÌNH YOLO
+   - pipeline_v15.py: nạp mô hình YOLO (best.pt) và cung cấp hàm phát hiện
+     bố cục cột chữ (get_yolo_layout) cùng hàm phân bổ ký tự vào cột theo
+     tỷ trọng chiều cao (allocate_characters).
+   - prep_new_posts.py: chạy YOLO cho các bài mới cào (xem mục 3).
+   - fix_columns.py: hàm clean_columns hậu xử lý hộp cột YOLO, khử các hộp
+     trùng lặp/lồng nhau và hộp đè lên vùng lạc khoản.
+   - Trọng số đã huấn luyện: src/runs/detect/calligraphy_det_v1/weights/best.pt
+
+========================================================================
+C. GHI CHÚ
+========================================================================
+- Nguyên tắc gán nhãn: nhãn lấy nguyên văn 100% từ caption của người đăng;
+  kết quả OCR của Gemini chỉ dùng làm mốc xác thực và gióng hàng.
+- Chi phí thực đo trên tài khoản: khoảng 45.590 VNĐ cho 6.071 bài chạy ở
+  chế độ Batch API, tương đương khoảng 7.500 VNĐ cho mỗi 1.000 bài.
+- Các file checkpoint*.txt và history*.db sinh ra khi cào KHÔNG được xoá
+  (mất con trỏ trạng thái sẽ phải cào lại từ đầu).
+- Trước khi chạy, thay API_KEY trong các tệp gọi Gemini bằng khóa của bạn
+  (xem HuongDanCaiDat.txt).

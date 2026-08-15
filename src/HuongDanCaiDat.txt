@@ -1,0 +1,46 @@
+HƯỚNG DẪN CÀI ĐẶT
+Đề tài: Tìm kiếm và xây dựng tự động kho ngữ liệu Hán Nôm từ Internet
+Mã đề tài: T826_KL_CNTTHUC03
+Sinh viên: Ngô Xuân Hiếu - 21127505
+
+1. MÔI TRƯỜNG PHÁT TRIỂN
+- Hệ điều hành: Windows 10/11 (mã nguồn dùng đường dẫn kiểu Windows).
+- Python 3.10 trở lên.
+- Kết nối Internet (gọi Google Gemini API và cào dữ liệu Facebook).
+
+2. TẠO MÔI TRƯỜNG ẢO VÀ CÀI THƯ VIỆN
+Mở PowerShell/CMD tại thư mục src, chạy lần lượt:
+
+    python -m venv venv
+    venv\Scripts\activate
+    pip install google-genai rapidfuzz opencc-python-reimplemented pillow numpy playwright aiohttp ultralytics
+    playwright install msedge
+
+Ghi chú từng thư viện:
+- google-genai        : gọi Gemini API (OCR + Batch API).
+- rapidfuzz           : tính khoảng cách Levenshtein / partial ratio alignment.
+- opencc-python-reimplemented : chuẩn hoá phồn thể - giản thể trước khi so khớp.
+- pillow, numpy       : xử lý ảnh.
+- playwright, aiohttp : cào dữ liệu Facebook (chặn bắt GraphQL, tải ảnh).
+- ultralytics         : chạy mô hình YOLO phát hiện cột chữ (bắt buộc khi
+                        chuẩn hoá bài mới bằng prep_new_posts.py; nếu chỉ
+                        xử lý các bài đã có sẵn toạ độ cột trong
+                        post_info.json thì không cần).
+
+3. CẤU HÌNH API KEY
+Các file gọi Gemini API (batch_api_gate.py, pipeline_v15.py) có biến:
+
+    API_KEY = "DAN_GEMINI_API_KEY_VAO_DAY"
+
+Thay chuỗi trên bằng API key Gemini của bạn (tạo miễn phí tại
+https://aistudio.google.com/apikey).
+
+4. MÔ HÌNH YOLO
+Trọng số mô hình phát hiện cột chữ đã huấn luyện nằm sẵn tại:
+    src/runs/detect/calligraphy_det_v1/weights/best.pt
+Không cần huấn luyện lại.
+
+5. ĐĂNG NHẬP FACEBOOK (chỉ cần khi chạy cào dữ liệu)
+Lần đầu chạy scraper, chương trình mở trình duyệt Edge và chờ 90 giây để
+đăng nhập Facebook thủ công; phiên đăng nhập được lưu vào cookies.json cho
+các lần chạy sau. Vì lý do bảo mật, mã nguồn nộp KHÔNG kèm cookies.json.
