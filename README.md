@@ -83,6 +83,9 @@ src/
 
 See **[INSTALL.md](INSTALL.md)** and **[USAGE.md](USAGE.md)** to set up and run.
 
+A Dockerized, long-running variant of the crawler (for unattended deployment on a headless
+server) is in **[docker-deploy-example/](docker-deploy-example/)**.
+
 ## Quick install
 
 ```bash

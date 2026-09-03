@@ -1,0 +1,14 @@
+services:
+  crawler:
+    build: .
+    image: fb-crawler
+    container_name: fb-crawler
+    restart: on-failure               # tu dung lai neu container chet (het RAM / reboot), khong lap lai khi da cao XONG
+    shm_size: "1gb"                   # /dev/shm mac dinh 64MB -> Chromium de chet khi cao lau
+    volumes:
+      - ./data:/data                 # trang thai + ket qua (checkpoint, db, cookies, anh)
+    environment:
+      GROUP_URL: "https://www.facebook.com/groups/1792625541124212?sorting_setting=CHRONOLOGICAL"
+      TARGET_POSTS: "0"              # 0 = cao vo han toi het
+      MAX_DUPES_STOP: "300"         # gap 300 bai trung lien tiep -> dung (cham vung da cao)
+      HEADLESS: "1"

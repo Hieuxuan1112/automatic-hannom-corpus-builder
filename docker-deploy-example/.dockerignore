@@ -1,0 +1,5 @@
+data/
+cookies.json
+__pycache__/
+*.pyc
+docker-compose.yml
